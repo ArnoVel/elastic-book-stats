@@ -1,11 +1,12 @@
 import PyPDF2 as ppdf
 import os
-import pprint as ppr
 from pdfminer.pdfparser import PDFParser, PDFDocument
 from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.converter import PDFPageAggregator
 from pdfminer.layout import LAParams, LTTextBox, LTTextLine
-from time import time
+from elasticsearch import Elasticsearch
+
+from utils import time_function, _pprint
 
 ### FOR NOW:
 ## Can iterate over dirs & files => get all books w/ type
@@ -19,18 +20,6 @@ from time import time
 #
 #     return _pdf_reader
 
-def time_function(func):
-    def wrapper(*args, **kwargs):
-        tstart = time()
-        res = func(*args, **kwargs)
-        tstop = time()
-        print(f"Execution of function {func.__name__} took {tstop - tstart}s (= {(tstop - tstart)/60.0}min)")
-        return res
-    return wrapper
-
-def _pprint(d, indent=4, depth=1):
-    pp = ppr.PrettyPrinter(indent=indent, depth=depth)
-    pp.pprint(d)
 
 def _read_pdf(pdf_path):
     _fp = open(pdf_path, 'rb')
@@ -59,7 +48,7 @@ def _iterate_dirs(dir_path):
             contents = [ sub_entry.name for sub_entry in os.scandir(dir_entry.path) if sub_entry.is_file()]
             yield dir_entry.name, contents
 
-def _get_all_pdfs(max_num=None):
+def _get_all_pdfs(start=0, max_num=None):
     ''' assumes a ./data/pdf/ structure & pdf files in subfolders
     '''
     break_flag = False ; count = 0
@@ -67,15 +56,18 @@ def _get_all_pdfs(max_num=None):
     dirpath = curr_path + '/data/pdf/'
     for dname, contents in _iterate_dirs(dirpath):
         for pdf_name in contents:
-            pdf_type = dname
-            pdf_path = dirpath + dname + '/' + pdf_name
-            if max_num is not None and count < max_num:
-                yield pdf_name, pdf_type, pdf_path
-            elif max_num is None:
-                yield pdf_name, pdf_type, pdf_path
+            if count >= start:
+                pdf_type = dname
+                pdf_path = dirpath + dname + '/' + pdf_name
+                if max_num is not None and count < max_num:
+                    yield pdf_name, pdf_type, pdf_path
+                elif max_num is None:
+                    yield pdf_name, pdf_type, pdf_path
+                else:
+                    break_flag = True
+                    break
             else:
-                break_flag = True
-                break
+                pass
             count += 1
         if break_flag:
             break
@@ -151,17 +143,38 @@ def _pdf_to_json(pdf_name, pdf_type, pdf_path):
     _json = {}
     _json['_author_str'] = _get_author(_doc, _interpreter, _device).replace('\t', ' ')
     _json['_num_pages'] = _get_numpages(pdf_path)
-    _json['_type'] = pdf_type
+    _json['_book_type'] = pdf_type
     _pdf_name = pdf_name if '.pdf' not in pdf_name else pdf_name[ 0 : pdf_name.find('.pdf') ]
     _json['_name'] = _pdf_name.replace('-', ' ')
     _json['_pages'] = [ page for i, page in _iterate_pages_as_str(_doc, _interpreter, _device) ]
     return _json
 
+def _json_to_index(pdf_json, id):
+    ''' creates a _type in the book-index
+        with basic information.
+        Avoid not setting id, as it creates a uid
+        for every entry, allowing massive amounts
+        of duplicates
+    '''
+    es = Elasticsearch()
+
+    # apparently no _type field anymore, specify as a field
+
+    es.index(   index='book-index',
+                body= pdf_json,
+                id=id
+                )
+
+
 
 
 if __name__ == '__main__':
-    for pdf_name, pdf_type, pdf_path in _get_all_pdfs(5):
+    start = 0 ; id = start
+    for pdf_name, pdf_type, pdf_path in _get_all_pdfs(start=start):
         # pdfr = _read_pdf(pdf_path)
         # _doc, _interpreter, _device = _read_pdf(pdf_path)
-        _print_book_header(pdf_name)
-        _pprint(_pdf_to_json(pdf_name, pdf_type, pdf_path))
+        _print_book_header(pdf_name) ; print('has the id: ', id)
+
+        _json = _pdf_to_json(pdf_name, pdf_type, pdf_path)
+
+        _pprint(_json) ; #_json_to_index(_json, id) ; id += 1
