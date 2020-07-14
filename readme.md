@@ -27,3 +27,6 @@ Given the documents in pdf form, one can index them with elk by running `basic_p
 The function `json_to_index(..)` maps the extracted pdf (as a json file) to its index.
 Only use when the index does not yet exist or has been erased.
 
+## Install requirements
+
+This project is small but uses specific libraries. For the python3 dependencies, use the `requirements.txt` file; I also have jupyter-specific dependencies which I haven't listed, but one is the [`ipynb`](https://github.com/ipython/ipynb) package
