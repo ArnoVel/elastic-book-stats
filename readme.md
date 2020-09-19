@@ -18,12 +18,19 @@ Using [ElasticSearch](https://www.elastic.co/), we create and index and compute 
 
 ## Creating the index locally & running tests on your machine
 
-Given the documents in pdf form, one can index them with elk by running `basic_parse_store` after removing the comment symbol (`#`) at the following line:
+Given the documents in pdf form, one can index them with elk by running `basic_parse_store` methods such as `generate_store_all`, which first calls
+the routine `pdf_to_pickle` to store extracted pages, author string, theme, etc as rows in a pandas DataFrame.
+For example the following calls:
 
 ```python
-    _pprint(_json) ; #_json_to_index(_json, id) ; id += 1
-```
-
+pdf_to_pickle()
+  books_df = pd.read_pickle('./data/dataframe/books_df.pkl')
+  j = 0
+  for i,row in books_df.iterrows():
+      pages, j = book_to_pages(row.to_dict(), j)
+      bulk_index(pages)
+  ```
+stores into an index named `page-index` each page, with its attached book name, book num_pages, theme etc.
 The function `json_to_index(..)` maps the extracted pdf (as a json file) to its index.
 Only use when the index does not yet exist or has been erased.
 
