@@ -196,7 +196,7 @@ def book_to_pages(pdf_json, start=0):
     for i,page in enumerate(pdf_json.get('_pages')):
         default = pdf_json.copy() ; del default['_pages']
         print(start, i+start)
-        default['_page'] = page.replace('\t', ' ')
+        default['_page'] = page.replace('\t', ' ').lower()
         default['_page_id'] = i+start
         default['_page_number'] = int(i)
         allpages.append(default)
@@ -216,7 +216,7 @@ def bulk_index(pdf_json_iter, index='page-index'):
     _pprint(actions, depth=2)
     helpers.bulk(es, actions)
 
-def generate_store_all():
+def generate_store_all(generate=True):
     ''' default method to generate data from pdfs,
         which are obtained through iterating over
         the the ./data/pdf folder.
@@ -225,24 +225,18 @@ def generate_store_all():
         then indexes books, pages and lines in 3
         different indexes
     '''
-    pdf_to_pickle()
+    if generate : pdf_to_pickle()
     books_df = pd.read_pickle('./data/dataframe/books_df.pkl')
     j = 0
     for i,row in books_df.iterrows():
         # lines = page_to_line(row.to_dict())
         # _json_to_index(lines, i, addendum='-lines')
         # print("before nump_pages:", row['_num_pages'], len(row.to_dict().get('_pages')))
-        es.index(index='book-index', body=row.to_dict(), id=i)
+        book = row.to_dict() ; book['_pages'] = [ page.replace('\t', ' ').lower() for page in book['_pages'] ]
+        es.index(index='book-index', body=book, id=i, doc_type='_doc')
         pages, j = book_to_pages(row.to_dict(), j)
         bulk_index(pages)
 
 if __name__ == '__main__':
     # pdf_to_pickle()
-    books_df = pd.read_pickle('./data/dataframe/books_df.pkl')
-    j = 0
-    for i,row in books_df.iterrows():
-        # lines = page_to_line(row.to_dict())
-        # _json_to_index(lines, i, addendum='-lines')
-        # print("before nump_pages:", row['_num_pages'], len(row.to_dict().get('_pages')))
-        pages, j = book_to_pages(row.to_dict(), j)
-        bulk_index(pages)
+    generate_store_all(False)

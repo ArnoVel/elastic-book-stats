@@ -94,7 +94,28 @@ def check_get_book(name):
     _pprint(res.get('hits').get('hits'), depth=2)
     print('is the number of hits (=',res.get('hits').get('total'),') equal to the number of pages (=',res.get('hits').get('hits')[0].get('_source').get('_num_pages'), ')')
 
+def page_match_emotion(emotion, slice=(0,-1)):
+    ''' fetches synonyms for `emotion` in ./data/words/<emotion>.csv,
+        and uses a match terms query to find pages which use these synonyms
+    '''
+
+    emotion_terms = df_to_list(emotion_to_df(emotion))
+    emotion_terms[slice[0]:slice[1]]
+    body = Dict()
+    body.query.bool.must.terms._page = emotion_terms
+    return es.search(index='page-index', body=body)
+
+def get_hits(result):
+    return result.get('hits').get('hits')
+
 ### Left to code: bit on filtering by emotion
 if __name__ == '__main__':
-    # res = page_get_titles()
-    check_get_book('hamlet')
+    res = page_get_titles()
+    # check_get_book('hamlet')
+    # res = page_match_emotion('fear', slice=(0,3))
+    #
+    # for hit in get_hits(res):
+    #     print(hit.get('_source').get('_name'), hit.get('_source').get('_page_number'))
+    # _pprint(get_hits(page_get_book('pygmalion')), depth=3)
+    _pprint(res)
+    print(page_num_docs())

@@ -23,14 +23,18 @@ the routine `pdf_to_pickle` to store extracted pages, author string, theme, etc 
 For example the following calls:
 
 ```python
-  pdf_to_pickle()
-  books_df = pd.read_pickle('./data/dataframe/books_df.pkl')
-  j = 0
-  for i,row in books_df.iterrows():
-      pages, j = book_to_pages(row.to_dict(), j)
-      bulk_index(pages)
+if generate : pdf_to_pickle()
+books_df = pd.read_pickle('./data/dataframe/books_df.pkl')
+j = 0
+for i,row in books_df.iterrows():
+    book = row.to_dict() ; book['_pages'] = [ page.replace('\t', ' ').lower() for page in book['_pages'] ]
+    es.index(index='book-index', body=book, id=i, doc_type='_doc')
+    pages, j = book_to_pages(row.to_dict(), j)
+    bulk_index(pages)
   ```
-stores into an index named `page-index` each page, with its attached book name, book num_pages, theme etc.
+which are at the core of `generate_store_all`stores into an index named `page-index` each page, with its attached book name, book num_pages, theme etc. The books are also stored as books in the index `book-index`.
+
+
 The function `json_to_index(..)` maps the extracted pdf (as a json file) to its index.
 Only use when the index does not yet exist or has been erased.
 
