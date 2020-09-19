@@ -4,9 +4,14 @@ from pdfminer.pdfparser import PDFParser, PDFDocument
 from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.converter import PDFPageAggregator
 from pdfminer.layout import LAParams, LTTextBox, LTTextLine
-from elasticsearch import Elasticsearch
+from elasticsearch import Elasticsearch, exceptions, helpers
+import time
+import pandas as pd
 
 from utils import time_function, _pprint
+import uuid
+
+es = Elasticsearch(hosts="localhost", port=9200)
 
 ### FOR NOW:
 ## Can iterate over dirs & files => get all books w/ type
@@ -77,11 +82,11 @@ def _display_string(num):
 
 
 def _print_page_header(idx):
-    print(_display_string(20))
+    print(_display_string(30))
     print( _display_string(10) + f'  Page #{idx}  ' + _display_string(10) )
 
 def _print_book_header(name):
-    print(_display_string(20))
+    print(_display_string(30))
     print( _display_string(10) + f'  Book {name}  ' + _display_string(10) )
 
 def is_pdfminer_text(layout_object):
@@ -103,7 +108,7 @@ def _iterate_pages_as_str(doc, interpreter, device):
     for i, page in enumerate(doc.get_pages()):
 
         interpreter.process_page(page) ; layout = device.get_result()
-        yield i, _concat_page(layout)
+        yield i, _concat_page(layout).replace('\t', ' ')
 
 def _get_author(doc, interpreter, device, end_str='\n', give_numpages=False):
     ''' finds where substring 'author' is first mentioned, and gives
@@ -149,27 +154,23 @@ def _pdf_to_json(pdf_name, pdf_type, pdf_path):
     _json['_pages'] = [ page for i, page in _iterate_pages_as_str(_doc, _interpreter, _device) ]
     return _json
 
-def _json_to_index(pdf_json, id):
+def _json_to_index(pdf_json, id, addendum=''):
     ''' creates a _type in the book-index
         with basic information.
         Avoid not setting id, as it creates a uid
         for every entry, allowing massive amounts
         of duplicates
     '''
-    es = Elasticsearch()
-
     # apparently no _type field anymore, specify as a field
 
-    es.index(   index='book-index',
+    es.index(   index='book-index'+addendum,
                 body= pdf_json,
                 id=id
                 )
 
 
-
-
-if __name__ == '__main__':
-    start = 0 ; id = start
+def pdf_to_pickle():
+    start = 0 ; id = start; rows=[]
     for pdf_name, pdf_type, pdf_path in _get_all_pdfs(start=start):
         # pdfr = _read_pdf(pdf_path)
         # _doc, _interpreter, _device = _read_pdf(pdf_path)
@@ -177,4 +178,72 @@ if __name__ == '__main__':
 
         _json = _pdf_to_json(pdf_name, pdf_type, pdf_path)
 
-        _pprint(_json) ; #_json_to_index(_json, id) ; id += 1
+        _pprint(_json) ; rows.append(_json)# _json_to_index(_json, id)
+
+        id += 1
+    pd.DataFrame(rows).to_pickle('./data/dataframe/books_df.pkl')
+
+def page_to_line(pdf_json):
+    ''' takes a pdf_json which only lists pages, and
+        further breaks the pdfs into lines with a line number
+    '''
+    sentences = [ {'_sentence':line.replace('\t',' '), '_sentence_num':i, '_page_num':j} for j,page in enumerate(pdf_json.get('_pages')) for i,line in enumerate(page.split('.')) ]
+    del pdf_json['_pages']
+    pdf_json['_lines'] = sentences
+    return pdf_json
+
+def book_to_pages(pdf_json, start=0):
+    allpages = []
+
+    for i,page in enumerate(pdf_json.get('_pages')):
+        default = pdf_json.copy() ; del default['_pages']
+        print(start, i+start)
+        default['_page'] = page.replace('\t', ' ')
+        default['_page_id'] = i+start
+        default['_page_number'] = int(i)
+        allpages.append(default)
+    return allpages, start+i+1
+
+def bulk_index(pdf_json_iter, index='page-index'):
+    ''' indexes a list of docs at a single time'''
+    actions = [
+        {
+            '_index': index,
+            '_id' : doc['_page_id'],
+            '_type': '_doc',
+            '_source': doc
+        }
+        for doc in pdf_json_iter
+    ]
+    _pprint(actions, depth=2)
+    helpers.bulk(es, actions)
+
+def generate_store_all():
+    ''' default method to generate data from pdfs,
+        which are obtained through iterating over
+        the the ./data/pdf folder.
+        The method assumes subfolders by theme,
+        first extracts and stores to df pickle,
+        then indexes books, pages and lines in 3
+        different indexes
+    '''
+    pdf_to_pickle()
+    books_df = pd.read_pickle('./data/dataframe/books_df.pkl')
+    j = 0
+    for i,row in books_df.iterrows():
+        # lines = page_to_line(row.to_dict())
+        # _json_to_index(lines, i, addendum='-lines')
+        # print("before nump_pages:", row['_num_pages'], len(row.to_dict().get('_pages')))
+        es.index(index='book-index', row.to_dict())
+        pages, j = book_to_pages(row.to_dict(), j)
+        bulk_index(pages)
+if __name__ == '__main__':
+    # pdf_to_pickle()
+    books_df = pd.read_pickle('./data/dataframe/books_df.pkl')
+    j = 0
+    for i,row in books_df.iterrows():
+        # lines = page_to_line(row.to_dict())
+        # _json_to_index(lines, i, addendum='-lines')
+        # print("before nump_pages:", row['_num_pages'], len(row.to_dict().get('_pages')))
+        pages, j = book_to_pages(row.to_dict(), j)
+        bulk_index(pages)
