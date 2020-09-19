@@ -7,9 +7,7 @@ from pdfminer.layout import LAParams, LTTextBox, LTTextLine
 from elasticsearch import Elasticsearch, exceptions, helpers
 import time
 import pandas as pd
-
 from utils import time_function, _pprint
-import uuid
 
 es = Elasticsearch(hosts="localhost", port=9200)
 
@@ -234,9 +232,10 @@ def generate_store_all():
         # lines = page_to_line(row.to_dict())
         # _json_to_index(lines, i, addendum='-lines')
         # print("before nump_pages:", row['_num_pages'], len(row.to_dict().get('_pages')))
-        es.index(index='book-index', row.to_dict())
+        es.index(index='book-index', body=row.to_dict(), id=i)
         pages, j = book_to_pages(row.to_dict(), j)
         bulk_index(pages)
+
 if __name__ == '__main__':
     # pdf_to_pickle()
     books_df = pd.read_pickle('./data/dataframe/books_df.pkl')
