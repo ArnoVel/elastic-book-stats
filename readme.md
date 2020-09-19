@@ -23,7 +23,7 @@ the routine `pdf_to_pickle` to store extracted pages, author string, theme, etc 
 For example the following calls:
 
 ```python
-pdf_to_pickle()
+  pdf_to_pickle()
   books_df = pd.read_pickle('./data/dataframe/books_df.pkl')
   j = 0
   for i,row in books_df.iterrows():
