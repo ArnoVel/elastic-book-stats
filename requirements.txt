@@ -3,4 +3,4 @@ numpy==1.19.2
 elasticsearch==6.8.0
 addict==2.3.0
 pdfminer==20191125
-PyPDF2==1.26.0
+PyPDF2==1.27.9
